@@ -1,0 +1,9 @@
+{
+	"compileOnSave": true,
+	"compilerOptions": {
+		"alwaysStrict": true,
+		"disableSizeLimit": true,
+        "watch": true
+	},
+	"files": ["main.ts"],
+}

@@ -1,0 +1,12 @@
+{
+	"dependencies": {
+		"@types/node": "^18.8.4",
+		"cheerio": "1.0.0-rc.12",
+		"epub": "^1.2.1",
+		"express": "^4.18.2",
+		"formidable": "^2.0.1",
+		"openurl": "^1.1.1",
+		"socket.io": "^4.5.2"
+	},
+	"module": "main.js"
+}

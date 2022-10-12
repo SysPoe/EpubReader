@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="IE=edge" http-equiv="X-UA-Compatible"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Epub Reader</title>
+    <style>
+        @import url("https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400;1,500;1,600;1,700;1,800&display=swap");
+
+        body {
+            padding: 0 30px 0 30px;
+            background: #191A1CFF;
+            color: white;
+            font-family: 'Open Sans', sans-serif;
+        }
+
+        .a, a {
+            color: #2599e7;
+            text-decoration-color: rgba(0, 0, 0, 0);
+            transition: all ease-in-out 100ms;
+            cursor: pointer;
+        }
+
+        .a:hover, a:hover {
+            text-decoration-color: #2599e7;
+        }
+
+        a:visited:hover {
+            text-decoration-color: lightblue;
+        }
+
+        a:visited {
+            color: lightblue;
+        }
+
+        p {
+            margin: 10px 0 10px 0;
+        }
+
+        #nolist {
+            width: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            text-align: center;
+            background: white;
+            color: black;
+        }
+    </style>
+    <script src="socket.io.js"></script>
+</head>
+<body>
+<div id="nolist" style="display: none">Running in nolist mode. <span class="a"
+                                                                     onclick="window.location.search = ''">Get a list</span>
+    or <span class="a" onclick="document.querySelector('#nolist').style.display = 'none';">hide this message</span>
+</div>
+<div>
+    <form action="upload" method="post" enctype="multipart/form-data">>
+        <label for="file">Choose a file to upload: </label>
+        <input
+                accept="application/epub+zip"
+                id="file"
+                name="file"
+                type="file">
+        <input type="submit" value="Upload">
+    </form>
+</div>
+<div id="list"></div>
+<div id="book"></div>
+<script>
+    function getBook(o) {
+        return () => {
+            socket.emit("parse", o);
+        }
+    }
+
+    let socket = io();
+    let params = new URL(window.location.href).searchParams;
+    if (!(params.has("nolist"))) socket.emit("list", {});
+    else document.querySelector("#nolist").style.display = "block";
+    if (window.location.hash !== "") {
+        getBook(decodeURIComponent(window.location.hash.replace("#", "")))();
+    }
+
+    socket.on("list", (list) => {
+        document.querySelector("#nolist").style.display = "none";
+        document.querySelector("#list").innerHTML = "";
+        for (let o of list) {
+            console.log(o);
+            let nameLinkEl = document.createElement("a");
+            let creatorLinkEl = document.createElement("a");
+            let containerEl = document.createElement("dib");
+            let brEl = document.createElement("br");
+            let pel1 = document.createElement("span");
+            let pel2 = document.createElement("span");
+            pel1.innerText = " by "
+            pel2.innerText = ` [${o.book}]`;
+
+            nameLinkEl.href = `#${o.book}`;
+            nameLinkEl.onclick = getBook(o.book);
+            nameLinkEl.innerText = o.title;
+
+            creatorLinkEl.href = `https://archiveofourown.org/users/${o.creator}`;
+            creatorLinkEl.innerText = o.creator;
+
+            containerEl.appendChild(nameLinkEl);
+            containerEl.appendChild(pel1)
+            containerEl.appendChild(creatorLinkEl);
+            containerEl.appendChild(pel2);
+            containerEl.appendChild(brEl);
+            document.querySelector("#list").appendChild(containerEl);
+        }
+    });
+    socket.on("results", result => {
+        document.querySelector("#book").innerHTML = "";
+        let titleEl = document.createElement("h1");
+        titleEl.textContent = result.results.metadata.title;
+        document.querySelector("#book").appendChild(titleEl);
+        for (let i = result.results.contentChapters.length - 3; i > -1; i--) {
+            let chapter = result.results.contentChapters[i];
+            if (chapter === 0) {
+                chapter = result.results.rawChapters[i];
+                let h2ttl = document.createElement("h2");
+                h2ttl.innerText = `Chapter ${chapter.loc - 1} (RAW)`;
+                document.querySelector("#book").appendChild(h2ttl);
+                continue;
+            }
+            let h2ttl = document.createElement("h2");
+            h2ttl.innerText = `Chapter ${chapter.loc - 1}: ${chapter.title}`;
+            document.querySelector("#book").appendChild(h2ttl);
+            for (const content of chapter.content) {
+                let el = document.createElement("p");
+                el.innerText = content;
+                document.querySelector("#book").appendChild(el);
+            }
+        }
+    });
+</script>
+</body>
+</html>
