@@ -3,7 +3,7 @@
 	"compilerOptions": {
 		"alwaysStrict": true,
 		"disableSizeLimit": true,
-        "watch": true
+        "watch": true,
 	},
-	"files": ["main.ts"],
+	"files": ["main.ts", "parsers/FileParser.ts", "parsers/pdf.ts"],
 }
