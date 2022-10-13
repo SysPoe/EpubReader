@@ -38,6 +38,10 @@
             margin: 10px 0 10px 0;
         }
 
+        #list {
+            margin-bottom: 30px;
+        }
+
         #nolist {
             width: 100%;
             position: fixed;
@@ -56,10 +60,10 @@
     or <span class="a" onclick="document.querySelector('#nolist').style.display = 'none';">hide this message</span>
 </div>
 <div>
-    <form action="upload" method="post" enctype="multipart/form-data">>
+    <form action="upload" enctype="multipart/form-data" method="post">>
         <label for="file">Choose a file to upload: </label>
         <input
-                accept="application/epub+zip"
+                accept="application/epub+zip,application/pdf"
                 id="file"
                 name="file"
                 type="file">
@@ -69,6 +73,22 @@
 <div id="list"></div>
 <div id="book"></div>
 <script>
+    function getCookie(cname) {
+        let name = cname + "=";
+        let decodedCookie = decodeURIComponent(document.cookie);
+        let ca = decodedCookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') {
+                c = c.substring(1);
+            }
+            if (c.indexOf(name) === 0) {
+                return c.substring(name.length, c.length);
+            }
+        }
+        return "";
+    }
+
     function getBook(o) {
         return () => {
             socket.emit("parse", o);
@@ -76,43 +96,86 @@
     }
 
     let socket = io();
-    let params = new URL(window.location.href).searchParams;
-    if (!(params.has("nolist"))) socket.emit("list", {});
-    else document.querySelector("#nolist").style.display = "block";
-    if (window.location.hash !== "") {
-        getBook(decodeURIComponent(window.location.hash.replace("#", "")))();
-    }
+    socket.on("connect", () => {
+        if (getCookie("key") !== "") {
+            socket.emit("key", getCookie("key"));
+        } else {
+            if (confirm("Login?")) socket.emit("username", prompt("Enter username:"));
+            else {
+                let params = new URL(window.location.href).searchParams;
+                if (!(params.has("nolist"))) socket.emit("list", {});
+                else document.querySelector("#nolist").style.display = "block";
+                if (window.location.hash !== "") {
+                    getBook(decodeURIComponent(window.location.hash.replace("#", "")))();
+                }
+            }
+        }
+    });
 
+    socket.on("key_invalid", () => {
+        if (confirm("Login?")) socket.emit("username", prompt("Enter username:"));
+        else {
+            let params = new URL(window.location.href).searchParams;
+            if (!(params.has("nolist"))) socket.emit("list", {});
+            else document.querySelector("#nolist").style.display = "block";
+            if (window.location.hash !== "") {
+                getBook(decodeURIComponent(window.location.hash.replace("#", "")))();
+            }
+        }
+    });
+    socket.on("key_valid", () => {
+        let params = new URL(window.location.href).searchParams;
+        if (!(params.has("nolist"))) socket.emit("list", {});
+        else document.querySelector("#nolist").style.display = "block";
+        if (window.location.hash !== "") {
+            getBook(decodeURIComponent(window.location.hash.replace("#", "")))();
+        }
+    });
+    socket.on("invalid_auth", () => {
+        socket.emit("username", prompt("Enter username:"));
+    });
+    socket.on("valid_username", () => {
+        socket.emit("password", prompt("Enter password:"));
+    });
+    socket.on("valid_password", (key) => {
+        document.cookie = `key=${key.key}; expires=${new Date(key.expires)}`;
+        let params = new URL(window.location.href).searchParams;
+        if (!(params.has("nolist"))) socket.emit("list", {});
+        else document.querySelector("#nolist").style.display = "block";
+        if (window.location.hash !== "") {
+            getBook(decodeURIComponent(window.location.hash.replace("#", "")))();
+        }
+    });
     socket.on("list", (list) => {
         document.querySelector("#nolist").style.display = "none";
         document.querySelector("#list").innerHTML = "";
         for (let o of list) {
-            console.log(o);
             let nameLinkEl = document.createElement("a");
-            let creatorLinkEl = document.createElement("a");
-            let containerEl = document.createElement("dib");
-            let brEl = document.createElement("br");
+            let creatorLinkEl = document.createElement("span");
+            let containerEl = document.createElement("div");
             let pel1 = document.createElement("span");
             let pel2 = document.createElement("span");
-            pel1.innerText = " by "
+            pel1.innerText = " by ";
             pel2.innerText = ` [${o.book}]`;
+            pel2.style.color = "#aaffaa";
 
             nameLinkEl.href = `#${o.book}`;
             nameLinkEl.onclick = getBook(o.book);
             nameLinkEl.innerText = o.title;
 
-            creatorLinkEl.href = `https://archiveofourown.org/users/${o.creator}`;
+            creatorLinkEl.classList.add("a");
+            creatorLinkEl.style.cursor = "auto";
             creatorLinkEl.innerText = o.creator;
 
             containerEl.appendChild(nameLinkEl);
             containerEl.appendChild(pel1)
             containerEl.appendChild(creatorLinkEl);
             containerEl.appendChild(pel2);
-            containerEl.appendChild(brEl);
             document.querySelector("#list").appendChild(containerEl);
         }
     });
     socket.on("results", result => {
+        totalChapters = result.results.contentChapters.length;
         document.querySelector("#book").innerHTML = "";
         let titleEl = document.createElement("h1");
         titleEl.textContent = result.results.metadata.title;
@@ -127,15 +190,35 @@
                 continue;
             }
             let h2ttl = document.createElement("h2");
+            let el = document.createElement("div");
             h2ttl.innerText = `Chapter ${chapter.loc - 1}: ${chapter.title}`;
             document.querySelector("#book").appendChild(h2ttl);
-            for (const content of chapter.content) {
-                let el = document.createElement("p");
-                el.innerText = content;
-                document.querySelector("#book").appendChild(el);
-            }
+            el.innerHTML = chapter.content;
+            document.querySelector("#book").appendChild(el);
+            // for (const content of chapter.content) {
+            //     let el = document.createElement("p");
+            //     el.innerText = content;
+            //     document.querySelector("#book").appendChild(el);
+            // }
         }
     });
+    socket.on("pdf", res => {
+        let {basename, key} = res;
+        document.querySelector("#book").innerHTML = "";
+
+        let url = new URL(window.location.href);
+        url.searchParams.set("name", basename);
+        url.searchParams.set("key", key);
+        url.pathname = "/pdf";
+        url.hash = "";
+
+        let iframe = document.createElement("iframe");
+        iframe.src = url.href;
+        iframe.width = window.innerWidth - 80;
+        iframe.height = iframe.width * Math.SQRT2;
+
+        document.querySelector("#book").appendChild(iframe);
+    })
 </script>
 </body>
 </html>

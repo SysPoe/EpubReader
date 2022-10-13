@@ -1,4 +1,19 @@
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __assign = (this && this.__assign) || function () {
     __assign = Object.assign || function(t) {
         for (var s, i = 1, n = arguments.length; i < n; i++) {
@@ -46,6 +61,22 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+exports.__esModule = true;
+exports.permaUserKeys = exports.tempUserKeys = void 0;
+var FileParser_1 = require("./parsers/FileParser");
+var pdf_1 = require("./parsers/pdf");
+var Epub = /** @class */ (function (_super) {
+    __extends(Epub, _super);
+    function Epub(chapterAmount, contentChapters, rawChapters, metadata) {
+        var _this = _super.call(this) || this;
+        _this.chapterAmount = chapterAmount;
+        _this.contentChapters = contentChapters;
+        _this.rawChapters = rawChapters;
+        _this.metadata = metadata;
+        return _this;
+    }
+    return Epub;
+}(FileParser_1.ListableFile));
 var express = require("express");
 var app = express();
 var http = require("http");
@@ -54,6 +85,8 @@ var Server = require("socket.io").Server;
 var EPub = require("epub");
 var formidable = require("formidable");
 var cheerio = require("cheerio");
+var path = require("path");
+var EventEmitter = require("events").EventEmitter;
 var debug = true;
 // .########.....###....########...######..####.##....##..######..
 // .##.....##...##.##...##.....##.##....##..##..###...##.##....##.
@@ -62,15 +95,6 @@ var debug = true;
 // .##........#########.##...##.........##..##..##..####.##....##.
 // .##........##.....##.##....##..##....##..##..##...###.##....##.
 // .##........##.....##.##.....##..######..####.##....##..######..
-var Epub = /** @class */ (function () {
-    function Epub(chapterAmount, contentChapters, rawChapters, metadata) {
-        this.chapterAmount = chapterAmount;
-        this.contentChapters = contentChapters;
-        this.rawChapters = rawChapters;
-        this.metadata = metadata;
-    }
-    return Epub;
-}());
 function debugLog() {
     var log = [];
     for (var _i = 0; _i < arguments.length; _i++) {
@@ -98,11 +122,11 @@ function parseContentChapter(html, id, loc) {
         summary = undefined;
     var contentBlock = $("div.userstuff2");
     var contentEls = contentBlock.children("p.calibre7");
-    var content = [];
+    var content = "";
     for (var _i = 0, contentEls_1 = contentEls; _i < contentEls_1.length; _i++) {
         var childNd = contentEls_1[_i];
         var child = $(childNd);
-        content.push(child.text());
+        content = content + ("<p>".concat(child.text(), "</p>"));
     }
     if (content.length < 1 && summary === undefined && afterword === undefined)
         return { id: id, loc: loc, html: html, type: "raw" };
@@ -111,7 +135,6 @@ function parseContentChapter(html, id, loc) {
 function parseEpub(location) {
     var epub = new EPub(location, "/", "/");
     epub.on("error", function (err) {
-        console.log(location);
         console.error(err);
     });
     var promise = new Promise(function (resolve) {
@@ -170,6 +193,36 @@ function parseEpub(location) {
     epub.parse();
     return promise;
 }
+function authUsername(username) {
+    switch (username) {
+        case "syspoe":
+        case "alex":
+            return true;
+        default:
+            return false;
+    }
+}
+function authPassword(username, password) {
+    if (username == "alex" && password == "")
+        return true;
+    if (username == "syspoe" && password == "")
+        return true;
+}
+function getCookie(cname, documentCookie) {
+    var name = cname + "=";
+    var decodedCookie = decodeURIComponent(documentCookie);
+    var ca = decodedCookie.split(';');
+    for (var i = 0; i < ca.length; i++) {
+        var c = ca[i];
+        while (c.charAt(0) === ' ') {
+            c = c.substring(1);
+        }
+        if (c.indexOf(name) === 0) {
+            return c.substring(name.length, c.length);
+        }
+    }
+    return "";
+}
 // ..######..########.########..##.....##.########.########.
 // .##....##.##.......##.....##.##.....##.##.......##.....##
 // .##.......##.......##.....##.##.....##.##.......##.....##
@@ -178,29 +231,70 @@ function parseEpub(location) {
 // .##....##.##.......##....##....##.##...##.......##....##.
 // ..######..########.##.....##....###....########.##.....##
 var server = http.createServer(app);
+var parseEmitter = new EventEmitter();
 var io = new Server(server);
+exports.tempUserKeys = {};
+exports.permaUserKeys = {};
+var eventHandlers = [];
+var pdfParser = new pdf_1.PdfParser();
+eventHandlers = pdfParser.register(app, parseEmitter, eventHandlers);
 var cache = {};
-app.get("/", function (req, res) {
-    res.send(fs.readFileSync("./public/index.html").toString());
-});
-app.get("/socket.io.js", function (req, res) {
-    res.send(fs.readFileSync("./public/socket.io.js").toString());
-});
-app.post("/upload", function (req, res) {
-    var form = new formidable.IncomingForm();
-    form.parse(req, function (error, fields, file) {
-        console.log(file);
-        var filepath = file.file.filepath;
-        var mypath = './Epubs/';
-        mypath += file.file.originalFilename;
-        fs.rename(filepath, mypath, function () {
-            res.writeHead(303, { Location: "/" });
-            res.end();
-        });
+function tempKeyAuth(key, type, user) {
+    if (key === undefined)
+        return false;
+    if (exports.tempUserKeys[key] === undefined)
+        return false;
+    if (exports.tempUserKeys[key].type !== type)
+        return false;
+    return exports.tempUserKeys[key].user === user;
+}
+function permaKeyAuth(key, user) {
+    if (key === undefined)
+        return false;
+    if (exports.permaUserKeys[key] === undefined)
+        return false;
+    if (exports.permaUserKeys[key].expires < Date.now())
+        return false;
+    return exports.permaUserKeys[key].user === user;
+}
+app.get("/", function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
+    return __generator(this, function (_a) {
+        res.end(fs.readFileSync("./public/index.html").toString());
+        return [2 /*return*/];
     });
-});
+}); });
+app.get("/socket.io.js", function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
+    return __generator(this, function (_a) {
+        res.end(fs.readFileSync("./public/socket.io.js").toString());
+        return [2 /*return*/];
+    });
+}); });
+app.post("/upload", function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
+    var key, form;
+    return __generator(this, function (_a) {
+        key = getCookie("key", req.headers.cookie);
+        form = new formidable.IncomingForm();
+        form.parse(req, function (error, fields, file) {
+            var filepath = file.file.filepath;
+            var mypath = './Epubs/';
+            if (key !== "" && exports.permaUserKeys[key].expires > Date.now())
+                mypath += "users/".concat(exports.permaUserKeys[key].user, "/");
+            mypath += file.file.originalFilename;
+            fs.rename(filepath, mypath, function () {
+                res.writeHead(303, { Location: "/" });
+                res.end();
+            });
+            if (key !== "" && exports.permaUserKeys[key].expires > Date.now())
+                console.log("\u001B[93m".concat(exports.permaUserKeys[key].user, "\u001B[0m upload \"").concat(file.file.originalFilename, "\" \u001B[38;2;50;255;50mSUCCESSFUL\u001B[0m"));
+            else
+                console.log("\u001B[93mGUEST\u001B[0m upload \"".concat(file.file.originalFilename, "\" \u001B[38;2;50;255;50mSUCCESSFUL\u001B[0m"));
+        });
+        return [2 /*return*/];
+    });
+}); });
 io.on("connection", function (socket) {
-    var ID = socket.id;
+    var ID = "".concat(socket.request.connection.remoteAddress, "-").concat(socket.id);
+    var user = "guest";
     debugLog("Connection established to \u001B[93m".concat(ID, "\u001B[0m"));
     socket.on("disconnect", function () { return __awaiter(void 0, void 0, void 0, function () {
         return __generator(this, function (_a) {
@@ -208,31 +302,79 @@ io.on("connection", function (socket) {
             return [2 /*return*/];
         });
     }); });
+    socket.on("key", function (key) {
+        var userKey = exports.permaUserKeys[key];
+        if (userKey === undefined) {
+            console.log("\u001B[93m".concat(ID, "\u001B[0m key auth attempt \u001B[38;2;255;50;50mDENIED - INVALID KEY\u001B[0m"));
+            return socket.emit("key_invalid");
+        }
+        if (userKey.expires < Date.now()) {
+            console.log("\u001B[93m".concat(ID, "\u001B[0m key auth attempt \u001B[38;2;255;50;50mDENIED - EXPIRED KEY\u001B[0m"));
+            return socket.emit("key_invalid");
+        }
+        console.log("\u001B[93m".concat(ID, "\u001B[0m key auth attempt \u001B[38;2;50;255;50mACCEPTED - USER \"").concat(userKey.user, "\"\u001B[0m"));
+        socket.emit("key_valid");
+        user = userKey.user;
+    });
+    socket.on("username", function (username) {
+        if (!authUsername(username)) {
+            console.log("\u001B[93m".concat(ID, "\u001B[0m password auth attempt \u001B[38;2;255;50;50mDENIED - INVALID USERNAME \"").concat(username, "\"\u001B[0m"));
+            return socket.emit("invalid_auth");
+        }
+        socket.emit("valid_username");
+        user = username;
+    });
+    socket.on("password", function (password) {
+        if (authPassword(user, password)) {
+            var key = Math.random().toString(36);
+            var expires = Date.now() + 1000 * 60;
+            exports.permaUserKeys[key] = { user: user, expires: expires };
+            console.log("\u001B[93m".concat(ID, "\u001B[0m password auth attempt \u001B[38;2;50;255;50mACCEPTED - USER \"").concat(user, "\"\u001B[0m"));
+            return socket.emit("valid_password", { key: key, expires: expires });
+        }
+        console.log("\u001B[93m".concat(ID, "\u001B[0m password auth attempt \u001B[38;2;255;50;50mDENIED - INVALID PASSWORD \"").concat(password, "\" FOR USERNAME \"").concat(user, "\"\u001B[0m"));
+        socket.emit("invalid_auth");
+        user = "guest";
+    });
     socket.on("list", function () { return __awaiter(void 0, void 0, void 0, function () {
-        var time, results, _i, _a, book, bookResults;
+        var time, results, userArray, _i, _a, book, fileExt, bookResults, res;
         return __generator(this, function (_b) {
             switch (_b.label) {
                 case 0:
                     time = new Date().getTime();
                     results = [];
-                    _i = 0, _a = fs.readdirSync("./Epubs");
+                    userArray = [];
+                    if (fs.existsSync("./Epubs/users/".concat(user)))
+                        userArray = fs.readdirSync("./Epubs/users/".concat(user)).map(function (value) { return "users/".concat(user, "/").concat(value); });
+                    _i = 0, _a = fs.readdirSync("./Epubs").concat(userArray);
                     _b.label = 1;
                 case 1:
-                    if (!(_i < _a.length)) return [3 /*break*/, 5];
+                    if (!(_i < _a.length)) return [3 /*break*/, 7];
                     book = _a[_i];
                     if (!(cache[book] !== undefined)) return [3 /*break*/, 2];
                     results.push(__assign(__assign({}, cache[book].metadata), { book: book }));
-                    return [3 /*break*/, 4];
-                case 2: return [4 /*yield*/, parseEpub("./Epubs/".concat(book))];
-                case 3:
-                    bookResults = _b.sent();
-                    cache[book] = bookResults;
-                    results.push(__assign(__assign({}, bookResults.metadata), { book: book }));
-                    _b.label = 4;
+                    return [3 /*break*/, 6];
+                case 2:
+                    fileExt = path.extname(book).toLowerCase();
+                    bookResults = void 0;
+                    if (fileExt.length < 1)
+                        return [3 /*break*/, 6];
+                    if (!(fileExt !== ".epub")) return [3 /*break*/, 3];
+                    bookResults = eventHandlers[fileExt].parseList("".concat(__dirname, "/Epubs/").concat(book));
+                    return [3 /*break*/, 5];
+                case 3: return [4 /*yield*/, parseEpub("./Epubs/".concat(book))];
                 case 4:
+                    res = _b.sent();
+                    bookResults = res;
+                    cache[book] = res;
+                    _b.label = 5;
+                case 5:
+                    results.push(__assign(__assign({}, bookResults.metadata), { book: book }));
+                    _b.label = 6;
+                case 6:
                     _i++;
                     return [3 /*break*/, 1];
-                case 5:
+                case 7:
                     debugLog("\u001B[92mlist\u001B[0m - \u001B[94m".concat(new Date().getTime() - time, "ms\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
                     socket.emit("list", results);
                     return [2 /*return*/];
@@ -240,7 +382,7 @@ io.on("connection", function (socket) {
         });
     }); });
     socket.on("parse", function (book) { return __awaiter(void 0, void 0, void 0, function () {
-        var results;
+        var fileExt, results;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -249,6 +391,15 @@ io.on("connection", function (socket) {
                     debugLog("\u001B[92mparse (C)\u001B[0m - \u001B[94m".concat(book, "\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
                     return [3 /*break*/, 3];
                 case 1:
+                    if (book.startsWith("users/") && !book.startsWith("users/".concat(user)))
+                        return [2 /*return*/];
+                    fileExt = path.extname(book).toLowerCase();
+                    if (fileExt !== ".epub")
+                        return [2 /*return*/, parseEmitter.emit(fileExt, {
+                                loc: "".concat(__dirname, "/Epubs/").concat(book),
+                                socket: socket,
+                                user: user
+                            })];
                     debugLog("\u001B[92mparse (NC)\u001B[0m - \u001B[94m".concat(book, "\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
                     return [4 /*yield*/, parseEpub("./Epubs/".concat(book))];
                 case 2:
