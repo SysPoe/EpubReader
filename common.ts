@@ -1,5 +1,5 @@
-const crypt = require("crypto");
+const crypt = require ( "crypto" );
 
-export function generateKey(size: number): string {
-    return crypt.randomBytes(size).toString('base64');
+export function generateKey ( size: number ): string {
+	return crypt.randomBytes ( size ).toString ( "hex" );
 }

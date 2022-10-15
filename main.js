@@ -89,14 +89,15 @@ var formidable = require("formidable");
 var cheerio = require("cheerio");
 var path = require("path");
 var EventEmitter = require("events").EventEmitter;
+var axios = require("axios");
 var debug = true;
-// .########.....###....########...######..####.##....##..######..
-// .##.....##...##.##...##.....##.##....##..##..###...##.##....##.
-// .##.....##..##...##..##.....##.##........##..####..##.##.......
-// .########..##.....##.########...######...##..##.##.##.##...####
-// .##........#########.##...##.........##..##..##..####.##....##.
-// .##........##.....##.##....##..##....##..##..##...###.##....##.
-// .##........##.....##.##.....##..######..####.##....##..######..
+//  ########     ###    ########   ######  #### ##    ##  ######
+//  ##     ##   ## ##   ##     ## ##    ##  ##  ###   ## ##    ##
+//  ##     ##  ##   ##  ##     ## ##        ##  ####  ## ##
+//  ########  ##     ## ########   ######   ##  ## ## ## ##   ####
+//  ##        ######### ##   ##         ##  ##  ##  #### ##    ##
+//  ##        ##     ## ##    ##  ##    ##  ##  ##   ### ##    ##
+//  ##        ##     ## ##     ##  ######  #### ##    ##  ######
 function debugLog() {
     var log = [];
     for (var _i = 0; _i < arguments.length; _i++) {
@@ -234,13 +235,13 @@ function getCookie(cname, documentCookie) {
     }
     return "";
 }
-// ..######..########.########..##.....##.########.########.
-// .##....##.##.......##.....##.##.....##.##.......##.....##
-// .##.......##.......##.....##.##.....##.##.......##.....##
-// ..######..######...########..##.....##.######...########.
-// .......##.##.......##...##....##...##..##.......##...##..
-// .##....##.##.......##....##....##.##...##.......##....##.
-// ..######..########.##.....##....###....########.##.....##
+//  ######  ######## ########  ##     ## ######## ########
+//  ##    ## ##       ##     ## ##     ## ##       ##     ##
+//  ##       ##       ##     ## ##     ## ##       ##     ##
+//   ######  ######   ########  ##     ## ######   ########
+//        ## ##       ##   ##    ##   ##  ##       ##   ##
+//  ##    ## ##       ##    ##    ## ##   ##       ##    ##
+//   ######  ######## ##     ##    ###    ######## ##     ##
 var server = http.createServer(app);
 var parseEmitter = new EventEmitter();
 var io = new Server(server);
@@ -484,6 +485,52 @@ io.on("connection", function (socket) { return __awaiter(void 0, void 0, void 0,
                 }
                 fs.rmSync("./Epubs/".concat(book));
                 return [2 /*return*/];
+            });
+        }); });
+        socket.on("ao3", function (link) { return __awaiter(void 0, void 0, void 0, function () {
+            var newLink, result, $, dlLink, path_1, stream, writeStream_1, _i, sockets_3, socketUser, err_1;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 5, , 6]);
+                        newLink = new URL(link);
+                        newLink.searchParams.set("view_adult", "true");
+                        return [4 /*yield*/, fetch(newLink)];
+                    case 1: return [4 /*yield*/, (_a.sent()).text()];
+                    case 2:
+                        result = _a.sent();
+                        $ = cheerio.load(result);
+                        dlLink = "http://archiveofourown.org".concat($($("ul.expandable.secondary a").get(1))
+                            .attr().href);
+                        path_1 = "./Epubs/dl_".concat((0, common_1.generateKey)(16), ".epub");
+                        if (user !== "guest")
+                            path_1 = "./Epubs/users/".concat(user, "/dl_").concat((0, common_1.generateKey)(16), ".epub");
+                        return [4 /*yield*/, axios.get(dlLink, {
+                                responseType: "stream"
+                            })];
+                    case 3:
+                        stream = _a.sent();
+                        writeStream_1 = fs.createWriteStream(path_1);
+                        stream.data.pipe(writeStream_1);
+                        return [4 /*yield*/, new Promise(function (resolve) {
+                                writeStream_1.on("finish", resolve);
+                            })];
+                    case 4:
+                        _a.sent();
+                        for (_i = 0, sockets_3 = sockets; _i < sockets_3.length; _i++) {
+                            socketUser = sockets_3[_i];
+                            if (path_1.startsWith("./Epubs/users/") && socketUser.user === user)
+                                socket.emit("update");
+                            else
+                                socket.emit("update");
+                        }
+                        return [3 /*break*/, 6];
+                    case 5:
+                        err_1 = _a.sent();
+                        console.error(err_1);
+                        return [3 /*break*/, 6];
+                    case 6: return [2 /*return*/];
+                }
             });
         }); });
         return [2 /*return*/];
