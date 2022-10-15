@@ -359,7 +359,7 @@ io.on ( "connection", async ( socket ) => {
 		try {
 			let newLink = new URL ( link );
 			newLink.searchParams.set ( "view_adult", "true" );
-			let result = await ( await fetch ( newLink ) ).text ();
+			let result = await ( await fetch ( newLink.href ) ).text ();
 			const $ = cheerio.load ( result );
 
 			let dlLink = `http://archiveofourown.org${ $ ( $ ( "ul.expandable.secondary a" ).get ( 1 ) )
