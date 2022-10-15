@@ -1,21 +1,25 @@
-import {EventEmitter} from "events";
-import {ExpressApp} from "../main";
+import { EventEmitter } from "events";
+import { ExpressApp } from "../main";
 
 export type Metadata = {
-    title: string;
-    creator: string;
-}
+	title: string;
+	creator: string;
+};
 
 export class ListableFile {
-    metadata: Metadata;
+	metadata: Metadata;
 
-    constructor(title: string = "", creator: string = "") {
-        this.metadata = {title, creator}
-    }
+	constructor(title: string = "", creator: string = "") {
+		this.metadata = { title, creator };
+	}
 }
 
 export interface FileParser {
-    register(app: ExpressApp, emitter: EventEmitter, fileList: FileParser[]): FileParser[]
+	register(
+		app: ExpressApp,
+		emitter: EventEmitter,
+		fileList: FileParser[],
+	): FileParser[];
 
-    parseList(absoluteFilePath: string): ListableFile
+	parseList(absoluteFilePath: string): ListableFile;
 }

@@ -5,5 +5,5 @@
 		"disableSizeLimit": true,
         "watch": true,
 	},
-	"files": ["main.ts", "parsers/FileParser.ts", "parsers/pdf.ts"],
+	"files": ["main.ts", "parsers/FileParser.ts", "parsers/pdf.ts", "common.ts"],
 }

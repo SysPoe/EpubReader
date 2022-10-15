@@ -62,9 +62,10 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 exports.__esModule = true;
-exports.permaUserKeys = exports.tempUserKeys = void 0;
+exports.permaUserKeys = exports.tempUserKeys = exports.KEY_SIZE = void 0;
 var FileParser_1 = require("./parsers/FileParser");
 var pdf_1 = require("./parsers/pdf");
+var common_1 = require("./common");
 var Epub = /** @class */ (function (_super) {
     __extends(Epub, _super);
     function Epub(chapterAmount, contentChapters, rawChapters, metadata) {
@@ -77,6 +78,7 @@ var Epub = /** @class */ (function (_super) {
     }
     return Epub;
 }(FileParser_1.ListableFile));
+exports.KEY_SIZE = 1024;
 var express = require("express");
 var app = express();
 var http = require("http");
@@ -126,16 +128,25 @@ function parseContentChapter(html, id, loc) {
     for (var _i = 0, contentEls_1 = contentEls; _i < contentEls_1.length; _i++) {
         var childNd = contentEls_1[_i];
         var child = $(childNd);
-        content = content + ("<p>".concat(child.text(), "</p>"));
+        content = content + "<p>".concat(child.text(), "</p>");
     }
     if (content.length < 1 && summary === undefined && afterword === undefined)
         return { id: id, loc: loc, html: html, type: "raw" };
-    return { id: id, loc: loc, html: html, title: title, content: content, summary: summary, afterword: afterword, type: "content" };
+    return {
+        id: id,
+        loc: loc,
+        html: html,
+        title: title,
+        content: content,
+        summary: summary,
+        afterword: afterword,
+        type: "content"
+    };
 }
 function parseEpub(location) {
     var epub = new EPub(location, "/", "/");
-    epub.on("error", function (err) {
-        console.error(err);
+    epub.on("error", function () {
+        console.error("\u001B[38;2;255;50;50mERROR: Invalid file ".concat(location, "\u001B[0m"));
     });
     var promise = new Promise(function (resolve) {
         epub.on("end", function () {
@@ -203,7 +214,7 @@ function authUsername(username) {
     }
 }
 function authPassword(username, password) {
-    if (username == "alex" && password == "")
+    if (username == "alex" && password == "Crypto123")
         return true;
     if (username == "syspoe" && password == "")
         return true;
@@ -211,10 +222,10 @@ function authPassword(username, password) {
 function getCookie(cname, documentCookie) {
     var name = cname + "=";
     var decodedCookie = decodeURIComponent(documentCookie);
-    var ca = decodedCookie.split(';');
+    var ca = decodedCookie.split(";");
     for (var i = 0; i < ca.length; i++) {
         var c = ca[i];
-        while (c.charAt(0) === ' ') {
+        while (c.charAt(0) === " ") {
             c = c.substring(1);
         }
         if (c.indexOf(name) === 0) {
@@ -235,6 +246,7 @@ var parseEmitter = new EventEmitter();
 var io = new Server(server);
 exports.tempUserKeys = {};
 exports.permaUserKeys = {};
+var sockets = [];
 var eventHandlers = [];
 var pdfParser = new pdf_1.PdfParser();
 eventHandlers = pdfParser.register(app, parseEmitter, eventHandlers);
@@ -276,7 +288,7 @@ app.post("/upload", function (req, res) { return __awaiter(void 0, void 0, void 
         form = new formidable.IncomingForm();
         form.parse(req, function (error, fields, file) {
             var filepath = file.file.filepath;
-            var mypath = './Epubs/';
+            var mypath = "./Epubs/";
             if (key !== "" && exports.permaUserKeys[key].expires > Date.now())
                 mypath += "users/".concat(exports.permaUserKeys[key].user, "/");
             mypath += file.file.originalFilename;
@@ -292,126 +304,191 @@ app.post("/upload", function (req, res) { return __awaiter(void 0, void 0, void 
         return [2 /*return*/];
     });
 }); });
-io.on("connection", function (socket) {
-    var ID = "".concat(socket.request.connection.remoteAddress, "-").concat(socket.id);
-    var user = "guest";
-    debugLog("Connection established to \u001B[93m".concat(ID, "\u001B[0m"));
-    socket.on("disconnect", function () { return __awaiter(void 0, void 0, void 0, function () {
-        return __generator(this, function (_a) {
-            debugLog("Disconnected from client \u001B[93m".concat(ID, "\u001B[0m"));
-            return [2 /*return*/];
-        });
-    }); });
-    socket.on("key", function (key) {
-        var userKey = exports.permaUserKeys[key];
-        if (userKey === undefined) {
-            console.log("\u001B[93m".concat(ID, "\u001B[0m key auth attempt \u001B[38;2;255;50;50mDENIED - INVALID KEY\u001B[0m"));
-            return socket.emit("key_invalid");
-        }
-        if (userKey.expires < Date.now()) {
-            console.log("\u001B[93m".concat(ID, "\u001B[0m key auth attempt \u001B[38;2;255;50;50mDENIED - EXPIRED KEY\u001B[0m"));
-            return socket.emit("key_invalid");
-        }
-        console.log("\u001B[93m".concat(ID, "\u001B[0m key auth attempt \u001B[38;2;50;255;50mACCEPTED - USER \"").concat(userKey.user, "\"\u001B[0m"));
-        socket.emit("key_valid");
-        user = userKey.user;
-    });
-    socket.on("username", function (username) {
-        if (!authUsername(username)) {
-            console.log("\u001B[93m".concat(ID, "\u001B[0m password auth attempt \u001B[38;2;255;50;50mDENIED - INVALID USERNAME \"").concat(username, "\"\u001B[0m"));
-            return socket.emit("invalid_auth");
-        }
-        socket.emit("valid_username");
-        user = username;
-    });
-    socket.on("password", function (password) {
-        if (authPassword(user, password)) {
-            var key = Math.random().toString(36);
-            var expires = Date.now() + 1000 * 60;
-            exports.permaUserKeys[key] = { user: user, expires: expires };
-            console.log("\u001B[93m".concat(ID, "\u001B[0m password auth attempt \u001B[38;2;50;255;50mACCEPTED - USER \"").concat(user, "\"\u001B[0m"));
-            return socket.emit("valid_password", { key: key, expires: expires });
-        }
-        console.log("\u001B[93m".concat(ID, "\u001B[0m password auth attempt \u001B[38;2;255;50;50mDENIED - INVALID PASSWORD \"").concat(password, "\" FOR USERNAME \"").concat(user, "\"\u001B[0m"));
-        socket.emit("invalid_auth");
+io.on("connection", function (socket) { return __awaiter(void 0, void 0, void 0, function () {
+    var ID, user, index, currentKey;
+    return __generator(this, function (_a) {
+        ID = "".concat(socket.request.connection.remoteAddress, "-").concat(socket.id);
         user = "guest";
-    });
-    socket.on("list", function () { return __awaiter(void 0, void 0, void 0, function () {
-        var time, results, userArray, _i, _a, book, fileExt, bookResults, res;
-        return __generator(this, function (_b) {
-            switch (_b.label) {
-                case 0:
-                    time = new Date().getTime();
-                    results = [];
-                    userArray = [];
-                    if (fs.existsSync("./Epubs/users/".concat(user)))
-                        userArray = fs.readdirSync("./Epubs/users/".concat(user)).map(function (value) { return "users/".concat(user, "/").concat(value); });
-                    _i = 0, _a = fs.readdirSync("./Epubs").concat(userArray);
-                    _b.label = 1;
-                case 1:
-                    if (!(_i < _a.length)) return [3 /*break*/, 7];
-                    book = _a[_i];
-                    if (!(cache[book] !== undefined)) return [3 /*break*/, 2];
-                    results.push(__assign(__assign({}, cache[book].metadata), { book: book }));
-                    return [3 /*break*/, 6];
-                case 2:
-                    fileExt = path.extname(book).toLowerCase();
-                    bookResults = void 0;
-                    if (fileExt.length < 1)
+        index = sockets.length;
+        sockets.push({ socket: socket, user: user });
+        debugLog("Connection established to \u001B[93m".concat(ID, "\u001B[0m"));
+        socket.on("disconnect", function () { return __awaiter(void 0, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                debugLog("Disconnected from client \u001B[93m".concat(ID, "\u001B[0m"));
+                return [2 /*return*/];
+            });
+        }); });
+        socket.on("key", function (key) { return __awaiter(void 0, void 0, void 0, function () {
+            var userKey;
+            return __generator(this, function (_a) {
+                userKey = exports.permaUserKeys[key];
+                if (userKey === undefined) {
+                    console.log("\u001B[93m".concat(ID, "\u001B[0m key auth attempt \u001B[38;2;255;50;50mDENIED - INVALID KEY\u001B[0m"));
+                    return [2 /*return*/, socket.emit("key_invalid")];
+                }
+                if (userKey.expires < Date.now()) {
+                    console.log("\u001B[93m".concat(ID, "\u001B[0m key auth attempt \u001B[38;2;255;50;50mDENIED - EXPIRED KEY\u001B[0m"));
+                    return [2 /*return*/, socket.emit("key_invalid")];
+                }
+                console.log("\u001B[93m".concat(ID, "\u001B[0m key auth attempt \u001B[38;2;50;255;50mACCEPTED - USER \"").concat(userKey.user, "\"\u001B[0m"));
+                socket.emit("key_valid");
+                currentKey = key;
+                user = userKey.user;
+                sockets[index].user = user;
+                return [2 /*return*/];
+            });
+        }); });
+        socket.on("username", function (username) { return __awaiter(void 0, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                if (!authUsername(username)) {
+                    console.log("\u001B[93m".concat(ID, "\u001B[0m password auth attempt \u001B[38;2;255;50;50mDENIED - INVALID USERNAME \"").concat(username, "\"\u001B[0m"));
+                    return [2 /*return*/, socket.emit("invalid_auth")];
+                }
+                socket.emit("valid_username");
+                user = username;
+                return [2 /*return*/];
+            });
+        }); });
+        socket.on("password", function (password) { return __awaiter(void 0, void 0, void 0, function () {
+            var key, expires;
+            return __generator(this, function (_a) {
+                if (authPassword(user, password)) {
+                    key = (0, common_1.generateKey)(exports.KEY_SIZE);
+                    expires = Date.now() + 1000 * 60;
+                    exports.permaUserKeys[key] = { user: user, expires: expires };
+                    console.log("\u001B[93m".concat(ID, "\u001B[0m password auth attempt \u001B[38;2;50;255;50mACCEPTED - USER \"").concat(user, "\"\u001B[0m"));
+                    sockets[index].user = user;
+                    currentKey = key;
+                    return [2 /*return*/, socket.emit("valid_password", { key: key, expires: expires })];
+                }
+                console.log("\u001B[93m".concat(ID, "\u001B[0m password auth attempt \u001B[38;2;255;50;50mDENIED - INVALID PASSWORD \"").concat(password, "\" FOR USERNAME \"").concat(user, "\"\u001B[0m"));
+                socket.emit("invalid_auth");
+                user = "guest";
+                return [2 /*return*/];
+            });
+        }); });
+        socket.on("deauth", function () { return __awaiter(void 0, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                console.log("\u001B[92mde-authenticate\u001B[0m - user \u001B[94m\"".concat(user, "\"\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
+                user = "guest";
+                if (currentKey !== undefined)
+                    exports.permaUserKeys[currentKey] = undefined;
+                currentKey = undefined;
+                return [2 /*return*/];
+            });
+        }); });
+        socket.on("deauthall", function () { return __awaiter(void 0, void 0, void 0, function () {
+            var _i, sockets_1, newSocket;
+            return __generator(this, function (_a) {
+                for (_i = 0, sockets_1 = sockets; _i < sockets_1.length; _i++) {
+                    newSocket = sockets_1[_i];
+                    if (newSocket.user === user)
+                        newSocket.socket.emit("deauth");
+                }
+                console.log("\u001B[92mde-authenticate all\u001B[0m - user \u001B[94m\"".concat(user, "\"\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
+                return [2 /*return*/];
+            });
+        }); });
+        socket.on("list", function () { return __awaiter(void 0, void 0, void 0, function () {
+            var time, results, userArray, _i, _a, book, fileExt, bookResults, res;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        time = new Date().getTime();
+                        results = [];
+                        userArray = [];
+                        if (fs.existsSync("./Epubs/users/".concat(user)))
+                            userArray = fs
+                                .readdirSync("./Epubs/users/".concat(user))
+                                .map(function (value) { return "users/".concat(user, "/").concat(value); });
+                        _i = 0, _a = fs.readdirSync("./Epubs").concat(userArray);
+                        _b.label = 1;
+                    case 1:
+                        if (!(_i < _a.length)) return [3 /*break*/, 7];
+                        book = _a[_i];
+                        if (!(cache[book] !== undefined)) return [3 /*break*/, 2];
+                        results.push(__assign(__assign({}, cache[book].metadata), { book: book }));
                         return [3 /*break*/, 6];
-                    if (!(fileExt !== ".epub")) return [3 /*break*/, 3];
-                    bookResults = eventHandlers[fileExt].parseList("".concat(__dirname, "/Epubs/").concat(book));
-                    return [3 /*break*/, 5];
-                case 3: return [4 /*yield*/, parseEpub("./Epubs/".concat(book))];
-                case 4:
-                    res = _b.sent();
-                    bookResults = res;
-                    cache[book] = res;
-                    _b.label = 5;
-                case 5:
-                    results.push(__assign(__assign({}, bookResults.metadata), { book: book }));
-                    _b.label = 6;
-                case 6:
-                    _i++;
-                    return [3 /*break*/, 1];
-                case 7:
-                    debugLog("\u001B[92mlist\u001B[0m - \u001B[94m".concat(new Date().getTime() - time, "ms\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
-                    socket.emit("list", results);
-                    return [2 /*return*/];
-            }
-        });
-    }); });
-    socket.on("parse", function (book) { return __awaiter(void 0, void 0, void 0, function () {
-        var fileExt, results;
-        return __generator(this, function (_a) {
-            switch (_a.label) {
-                case 0:
-                    if (!(cache[book] !== undefined)) return [3 /*break*/, 1];
-                    socket.emit("results", { book: book, results: cache[book] });
-                    debugLog("\u001B[92mparse (C)\u001B[0m - \u001B[94m".concat(book, "\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
-                    return [3 /*break*/, 3];
-                case 1:
-                    if (book.startsWith("users/") && !book.startsWith("users/".concat(user)))
+                    case 2:
+                        fileExt = path.extname(book).toLowerCase();
+                        bookResults = void 0;
+                        if (fileExt.length < 1)
+                            return [3 /*break*/, 6];
+                        if (!(fileExt !== ".epub")) return [3 /*break*/, 3];
+                        bookResults = eventHandlers[fileExt].parseList("".concat(__dirname, "/Epubs/").concat(book));
+                        return [3 /*break*/, 5];
+                    case 3: return [4 /*yield*/, parseEpub("./Epubs/".concat(book))];
+                    case 4:
+                        res = _b.sent();
+                        bookResults = res;
+                        cache[book] = res;
+                        _b.label = 5;
+                    case 5:
+                        results.push(__assign(__assign({}, bookResults.metadata), { book: book }));
+                        _b.label = 6;
+                    case 6:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 7:
+                        debugLog("\u001B[92mlist\u001B[0m - \u001B[94m".concat(new Date().getTime() - time, "ms\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
+                        socket.emit("list", results);
                         return [2 /*return*/];
-                    fileExt = path.extname(book).toLowerCase();
-                    if (fileExt !== ".epub")
-                        return [2 /*return*/, parseEmitter.emit(fileExt, {
-                                loc: "".concat(__dirname, "/Epubs/").concat(book),
-                                socket: socket,
-                                user: user
-                            })];
-                    debugLog("\u001B[92mparse (NC)\u001B[0m - \u001B[94m".concat(book, "\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
-                    return [4 /*yield*/, parseEpub("./Epubs/".concat(book))];
-                case 2:
-                    results = _a.sent();
-                    cache[book] = results;
-                    socket.emit("results", { book: book, results: results });
-                    _a.label = 3;
-                case 3: return [2 /*return*/];
-            }
-        });
-    }); });
-});
+                }
+            });
+        }); });
+        socket.on("parse", function (book) { return __awaiter(void 0, void 0, void 0, function () {
+            var fileExt, results;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(cache[book] !== undefined)) return [3 /*break*/, 1];
+                        socket.emit("results", { book: book, results: cache[book] });
+                        debugLog("\u001B[92mparse (C)\u001B[0m - \u001B[94m".concat(book, "\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
+                        return [3 /*break*/, 3];
+                    case 1:
+                        if (book.startsWith("users/") && !book.startsWith("users/".concat(user)))
+                            return [2 /*return*/];
+                        fileExt = path.extname(book).toLowerCase();
+                        if (fileExt !== ".epub")
+                            return [2 /*return*/, parseEmitter.emit(fileExt, {
+                                    loc: "".concat(__dirname, "/Epubs/").concat(book),
+                                    socket: socket,
+                                    user: user
+                                })];
+                        debugLog("\u001B[92mparse (NC)\u001B[0m - \u001B[94m".concat(book, "\u001B[0m from \u001B[93m").concat(ID, "\u001B[0m"));
+                        return [4 /*yield*/, parseEpub("./Epubs/".concat(book))];
+                    case 2:
+                        results = _a.sent();
+                        cache[book] = results;
+                        socket.emit("results", { book: book, results: results });
+                        _a.label = 3;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        }); });
+        socket.on("delete", function (book) { return __awaiter(void 0, void 0, void 0, function () {
+            var _i, sockets_2, socketUser;
+            return __generator(this, function (_a) {
+                if (book.startsWith("users/") && !book.startsWith("users/".concat(user))) {
+                    debugLog("\u001B[38;2;255;50;50mdelete\u001B[0m - \u001B[94m".concat(book, "\u001B[0m from \u001B[93m").concat(ID, "\u001B[38;2;255;50;50m DENIED - WRONG USER \"").concat(book.split("/")[1], "\" EXPECTED \"").concat(user, "\"\u001B[0m"));
+                    return [2 /*return*/];
+                }
+                debugLog("\u001B[38;2;255;50;50mdelete\u001B[0m - \u001B[94m".concat(book, "\u001B[0m from \u001B[93m").concat(ID, "\u001B[38;2;50;255;50m ACCEPTED\u001B[0m"));
+                cache[book] = undefined;
+                for (_i = 0, sockets_2 = sockets; _i < sockets_2.length; _i++) {
+                    socketUser = sockets_2[_i];
+                    if (book.startsWith("users/") && socketUser.user === user)
+                        socket.emit("delete", book);
+                    else
+                        socket.emit("delete", book);
+                }
+                fs.rmSync("./Epubs/".concat(book));
+                return [2 /*return*/];
+            });
+        }); });
+        return [2 /*return*/];
+    });
+}); });
 server.listen(3000, function () {
     console.log("Listening on *:3000... Access at http://localhost:3000");
     // if(debug) require("openurl").open("http://localhost:3000");

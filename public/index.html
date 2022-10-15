@@ -10,19 +10,21 @@
 
         body {
             padding: 0 30px 0 30px;
-            background: #191A1CFF;
+            background: #191a1cff;
             color: white;
-            font-family: 'Open Sans', sans-serif;
+            font-family: "Open Sans", sans-serif;
         }
 
-        .a, a {
+        .a,
+        a {
             color: #2599e7;
-            text-decoration-color: rgba(0, 0, 0, 0);
+            text-decoration: underline solid rgba(0, 0, 0, 0);
             transition: all ease-in-out 100ms;
             cursor: pointer;
         }
 
-        .a:hover, a:hover {
+        .a:hover,
+        a:hover {
             text-decoration-color: #2599e7;
         }
 
@@ -32,6 +34,25 @@
 
         a:visited {
             color: lightblue;
+        }
+
+        .spaced::before {
+            content: "___";
+            color: rgba(0, 0, 0, 0);
+            text-decoration-color: rgba(0, 0, 0, 0) !important;
+            text-decoration-style: solid !important;
+            text-decoration-line: none !important;
+
+            user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            -webkit-user-select: none;
+
+            cursor: auto;
+        }
+
+        .spaced:hover .spaced::before {
+            background: red;
         }
 
         p {
@@ -55,31 +76,47 @@
     <script src="socket.io.js"></script>
 </head>
 <body>
-<div id="nolist" style="display: none">Running in nolist mode. <span class="a"
-                                                                     onclick="window.location.search = ''">Get a list</span>
-    or <span class="a" onclick="document.querySelector('#nolist').style.display = 'none';">hide this message</span>
+<div id="nolist" style="display: none">
+    Running in nolist mode.
+    <span class="a" onclick="window.location.search = ''"
+    >Get a list</span
+    >
+    or
+    <span
+            class="a"
+            onclick="document.querySelector('#nolist').style.display = 'none';"
+    >hide this message</span
+    >
 </div>
+<div id="userSettings"></div>
 <div>
-    <form action="upload" enctype="multipart/form-data" method="post">>
+    <form action="upload" enctype="multipart/form-data" method="post">
+        >
         <label for="file">Choose a file to upload: </label>
         <input
                 accept="application/epub+zip,application/pdf"
                 id="file"
                 name="file"
-                type="file">
-        <input type="submit" value="Upload">
+                type="file"
+        />
+        <input type="submit" value="Upload"/>
     </form>
 </div>
 <div id="list"></div>
 <div id="book"></div>
 <script>
+    let loggedIn = false;
+    let chapters = [];
+    let chapter = 0;
+    let prev = "foward";
+
     function getCookie(cname) {
         let name = cname + "=";
         let decodedCookie = decodeURIComponent(document.cookie);
-        let ca = decodedCookie.split(';');
+        let ca = decodedCookie.split(";");
         for (let i = 0; i < ca.length; i++) {
             let c = ca[i];
-            while (c.charAt(0) === ' ') {
+            while (c.charAt(0) === " ") {
                 c = c.substring(1);
             }
             if (c.indexOf(name) === 0) {
@@ -92,7 +129,139 @@
     function getBook(o) {
         return () => {
             socket.emit("parse", o);
+        };
+    }
+
+    function deleteBook(o) {
+        return () => {
+            socket.emit("delete", o);
+        };
+    }
+
+    function constructUserSettings() {
+        let containerEl = document.querySelector("#userSettings");
+        let startDivider = document.createElement("span");
+        let endDivider = document.createElement("span");
+        let logout = document.createElement("span");
+        let logoutAll = document.createElement("span");
+
+        startDivider.innerHTML =
+            "----------<br /><b>User Account Settings</b><br />";
+        endDivider.innerHTML = "----------<br />";
+
+        logout.innerHTML = "[Logout from account]<br />";
+        logout.classList.add("a");
+        logout.classList.add("spaced");
+        logout.onclick = () => {
+            document.cookie = "";
+            socket.emit("deauth");
+            socket.emit("list");
+            onStart();
+        };
+        logoutAll.innerHTML = "[Logout all clients from account]<br />";
+        logoutAll.classList.add("a");
+        logoutAll.classList.add("spaced");
+        logoutAll.onclick = () => {
+            socket.emit("deauthall");
+            console.log("hey!");
+        };
+
+        containerEl.appendChild(startDivider);
+        containerEl.appendChild(logout);
+        containerEl.appendChild(logoutAll);
+        containerEl.appendChild(endDivider);
+    }
+
+    function deconstructUserSettings() {
+        document.querySelector("#userSettings").innerHTML = "";
+    }
+
+    function onLogin() {
+        loggedIn = true;
+        constructUserSettings();
+        let params = new URL(window.location.href).searchParams;
+        if (!params.has("nolist")) socket.emit("list", {});
+        else document.querySelector("#nolist").style.display = "block";
+        if (window.location.hash !== "") {
+            getBook(
+                decodeURIComponent(
+                    window.location.hash.replace("#", ""),
+                ),
+            )();
         }
+    }
+
+    function onStart() {
+        if (loggedIn) deconstructUserSettings();
+        if (confirm("Login?"))
+            socket.emit("username", prompt("Enter username:"));
+        else {
+            let params = new URL(window.location.href).searchParams;
+            if (!params.has("nolist")) socket.emit("list", {});
+            else
+                document.querySelector("#nolist").style.display =
+                    "block";
+            if (window.location.hash !== "") {
+                getBook(
+                    decodeURIComponent(
+                        window.location.hash.replace("#", ""),
+                    ),
+                )();
+            }
+        }
+    }
+
+    function displayChapter(inc = "forward", first = false) {
+        let nextButton = document.createElement("button");
+        let prevButton = document.createElement("button");
+        let topNextButton = document.createElement("button");
+        let topPrevButton = document.createElement("button");
+
+        nextButton.innerText = "Next Chapter";
+        nextButton.onclick = () => {
+            displayChapter();
+        }
+        topNextButton.innerText = "Next Chapter";
+        topNextButton.onclick = () => {
+            displayChapter();
+        }
+
+        prevButton.innerText = "Previous Chapter";
+        prevButton.onclick = () => {
+            displayChapter("backward");
+        }
+        topPrevButton.innerText = "Previous Chapter";
+        topPrevButton.onclick = () => {
+            displayChapter("backward");
+        }
+
+        if (inc === "forward") {
+            if (chapter >= chapter.length) return;
+            if (!first) chapter++;
+            document.querySelector("#book").innerHTML = "";
+
+            if (chapter !== 0) document.querySelector("#book").appendChild(topPrevButton);
+            if (chapter < chapters.length - 1) document.querySelector("#book").appendChild(topNextButton);
+
+            document.querySelector("#book").appendChild(chapters[chapter]);
+
+            if (chapter !== 0) document.querySelector("#book").appendChild(prevButton);
+            if (chapter < chapters.length - 1) document.querySelector("#book").appendChild(nextButton);
+            prev = inc;
+        } else if (inc === "backward") {
+            if (chapter <= 0) return;
+            chapter--;
+            document.querySelector("#book").innerHTML = "";
+
+            if (chapter !== 0) document.querySelector("#book").appendChild(topPrevButton);
+            if (chapter < chapters.length - 1) document.querySelector("#book").appendChild(topNextButton);
+
+            document.querySelector("#book").appendChild(chapters[chapter]);
+
+            if (chapter !== 0) document.querySelector("#book").appendChild(prevButton);
+            if (chapter < chapters.length - 1) document.querySelector("#book").appendChild(nextButton);
+        }
+        window.scrollTo({top: 0});
     }
 
     let socket = io();
@@ -100,36 +269,15 @@
         if (getCookie("key") !== "") {
             socket.emit("key", getCookie("key"));
         } else {
-            if (confirm("Login?")) socket.emit("username", prompt("Enter username:"));
-            else {
-                let params = new URL(window.location.href).searchParams;
-                if (!(params.has("nolist"))) socket.emit("list", {});
-                else document.querySelector("#nolist").style.display = "block";
-                if (window.location.hash !== "") {
-                    getBook(decodeURIComponent(window.location.hash.replace("#", "")))();
-                }
-            }
+            onStart();
         }
     });
 
     socket.on("key_invalid", () => {
-        if (confirm("Login?")) socket.emit("username", prompt("Enter username:"));
-        else {
-            let params = new URL(window.location.href).searchParams;
-            if (!(params.has("nolist"))) socket.emit("list", {});
-            else document.querySelector("#nolist").style.display = "block";
-            if (window.location.hash !== "") {
-                getBook(decodeURIComponent(window.location.hash.replace("#", "")))();
-            }
-        }
+        onStart();
     });
     socket.on("key_valid", () => {
-        let params = new URL(window.location.href).searchParams;
-        if (!(params.has("nolist"))) socket.emit("list", {});
-        else document.querySelector("#nolist").style.display = "block";
-        if (window.location.hash !== "") {
-            getBook(decodeURIComponent(window.location.hash.replace("#", "")))();
-        }
+        onLogin();
     });
     socket.on("invalid_auth", () => {
         socket.emit("username", prompt("Enter username:"));
@@ -138,13 +286,16 @@
         socket.emit("password", prompt("Enter password:"));
     });
     socket.on("valid_password", (key) => {
-        document.cookie = `key=${key.key}; expires=${new Date(key.expires)}`;
-        let params = new URL(window.location.href).searchParams;
-        if (!(params.has("nolist"))) socket.emit("list", {});
-        else document.querySelector("#nolist").style.display = "block";
-        if (window.location.hash !== "") {
-            getBook(decodeURIComponent(window.location.hash.replace("#", "")))();
-        }
+        document.cookie = `key=${key.key}; expires=${new Date(
+            key.expires,
+        )}`;
+        onLogin();
+    });
+    socket.on("deauth", () => {
+        document.cookie = "";
+        socket.emit("deauth");
+        socket.emit("list");
+        onStart();
     });
     socket.on("list", (list) => {
         document.querySelector("#nolist").style.display = "none";
@@ -155,9 +306,16 @@
             let containerEl = document.createElement("div");
             let pel1 = document.createElement("span");
             let pel2 = document.createElement("span");
+            let pel3 = document.createElement("span");
+            let deleteButton = document.createElement("span");
+            deleteButton.innerHTML = "[Delete]";
+            deleteButton.classList.add("a");
+            deleteButton.onclick = deleteBook(o.book);
+
             pel1.innerText = " by ";
             pel2.innerText = ` [${o.book}]`;
             pel2.style.color = "#aaffaa";
+            pel3.innerHTML = "&#8195";
 
             nameLinkEl.href = `#${o.book}`;
             nameLinkEl.onclick = getBook(o.book);
@@ -167,42 +325,59 @@
             creatorLinkEl.style.cursor = "auto";
             creatorLinkEl.innerText = o.creator;
 
+            containerEl.setAttribute("name", o.book);
+
+            containerEl.appendChild(deleteButton);
+            containerEl.appendChild(pel3);
             containerEl.appendChild(nameLinkEl);
-            containerEl.appendChild(pel1)
+            containerEl.appendChild(pel1);
             containerEl.appendChild(creatorLinkEl);
             containerEl.appendChild(pel2);
             document.querySelector("#list").appendChild(containerEl);
         }
     });
-    socket.on("results", result => {
-        totalChapters = result.results.contentChapters.length;
+    socket.on("delete", (book) => {
+        document.querySelector(`[name=${book}]`).remove();
+    });
+    socket.on("results", (result) => {
+        chapter = 0;
+        chapters = [];
         document.querySelector("#book").innerHTML = "";
         let titleEl = document.createElement("h1");
         titleEl.textContent = result.results.metadata.title;
         document.querySelector("#book").appendChild(titleEl);
-        for (let i = result.results.contentChapters.length - 3; i > -1; i--) {
+        for (
+            let i = result.results.contentChapters.length - 3;
+            i > -1;
+            i--
+        ) {
             let chapter = result.results.contentChapters[i];
+            let el = document.createElement("div");
             if (chapter === 0) {
                 chapter = result.results.rawChapters[i];
                 let h2ttl = document.createElement("h2");
                 h2ttl.innerText = `Chapter ${chapter.loc - 1} (RAW)`;
                 document.querySelector("#book").appendChild(h2ttl);
+                el.appendChild(h2ttl);
+                chapters.push(el);
                 continue;
             }
             let h2ttl = document.createElement("h2");
-            let el = document.createElement("div");
-            h2ttl.innerText = `Chapter ${chapter.loc - 1}: ${chapter.title}`;
-            document.querySelector("#book").appendChild(h2ttl);
-            el.innerHTML = chapter.content;
-            document.querySelector("#book").appendChild(el);
+            h2ttl.innerText = `Chapter ${chapter.loc - 1}: ${
+                chapter.title
+            }`;
+            el.appendChild(h2ttl);
+            el.innerHTML += chapter.content;
+            chapters.push(el);
             // for (const content of chapter.content) {
             //     let el = document.createElement("p");
             //     el.innerText = content;
             //     document.querySelector("#book").appendChild(el);
             // }
         }
+        displayChapter("forward", true);
     });
-    socket.on("pdf", res => {
+    socket.on("pdf", (res) => {
         let {basename, key} = res;
         document.querySelector("#book").innerHTML = "";
 
@@ -218,7 +393,7 @@
         iframe.height = iframe.width * Math.SQRT2;
 
         document.querySelector("#book").appendChild(iframe);
-    })
+    });
 </script>
 </body>
 </html>

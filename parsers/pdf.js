@@ -41,6 +41,7 @@ var FileParser_1 = require("./FileParser");
 var main_1 = require("../main");
 var fs = require("fs");
 var path = require("path");
+var common_1 = require("../common");
 var PdfParser = /** @class */ (function () {
     function PdfParser() {
     }
@@ -69,7 +70,8 @@ var PdfParser = /** @class */ (function () {
                 res.writeHead(401);
                 return res.end();
             }
-            if (name.startsWith("users/") && !name.startsWith("users/".concat(key.user))) {
+            if (name.startsWith("users/") &&
+                !name.startsWith("users/".concat(key.user))) {
                 console.log("\u001B[93m".concat(req.connection.remoteAddress, "\u001B[0m request \u001B[94m").concat(name, "\u001B[0m \u001B[38;2;255;50;50mDENIED - WRONG USER \"").concat(name.split("/")[1], "\" EXPECTED \"").concat(key.user, "\"\u001B[0m"));
                 res.writeHead(401);
                 main_1.tempUserKeys[url.searchParams.get("key")].status = "expired";
@@ -93,7 +95,7 @@ var PdfParser = /** @class */ (function () {
                 split = loc.split("/");
                 if (split[split.length - 3] === "users")
                     basename = split.slice(-3).join("/");
-                key = Math.random().toString(36);
+                key = (0, common_1.generateKey)(main_1.KEY_SIZE);
                 main_1.tempUserKeys[key] = { user: user, type: "pdf", status: "valid" };
                 socket.emit("pdf", { basename: basename, key: key });
                 return [2 /*return*/];
