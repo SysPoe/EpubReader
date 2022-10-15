@@ -495,7 +495,7 @@ io.on("connection", function (socket) { return __awaiter(void 0, void 0, void 0,
                         _a.trys.push([0, 5, , 6]);
                         newLink = new URL(link);
                         newLink.searchParams.set("view_adult", "true");
-                        return [4 /*yield*/, fetch(newLink)];
+                        return [4 /*yield*/, fetch(newLink.href)];
                     case 1: return [4 /*yield*/, (_a.sent()).text()];
                     case 2:
                         result = _a.sent();
