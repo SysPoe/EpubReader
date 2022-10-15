@@ -103,7 +103,8 @@
 			top:             0;
 			left:            100%;
 			width:           calc(100% - 60px);
-			-moz-transition: all 300ms ease-in-out;-ms-transition: all 300ms ease-in-out;-o-transition: all 300ms ease-in-out;-webkit-transition: all 300ms ease-in-out;transition: all 300ms ease-in-out;
+			-moz-transition: all 300ms ease-in-out;-ms-transition: all 300ms ease-in-out;-o-transition: all 300ms ease-in-out;-webkit-transition: all 300ms ease-in-out;
+			transition:      all 300ms ease-in-out;
 			background:      #191A1CFF;
 		}
 	</style>
@@ -255,8 +256,9 @@
 	}
 
 	function displayChapter ( inc = "forward", first = false ) {
+		let prevDisplay = document.querySelector( "#backToBook" ).style.display;
 		document.querySelector( "#right" ).style.left = "30px";
-		document.querySelector( "#backToBook" ).style.display = "block";
+		if ( prevDisplay !== "block" ) document.querySelector( "#backToBook" ).style.display = "block";
 		let nextButton = document.createElement( "button" );
 		let prevButton = document.createElement( "button" );
 		let backButton = document.createElement( "button" );
@@ -287,7 +289,11 @@
 		};
 
 		if ( inc === "forward" ) {
-			if ( chapter >= chapter.length ) return;
+			if ( chapter >= chapter.length ) {
+				document.querySelector( "#right" ).style.left = "100%";
+				document.querySelector( "#backToBook" ).style.display = prevDisplay;
+				return;
+			}
 			if ( !first ) chapter++;
 			document.querySelector( "#book" ).innerHTML = "";
 
@@ -301,7 +307,11 @@
 			if ( chapter < chapters.length - 1 ) document.querySelector( "#book" ).appendChild( nextButton );
 			prev = inc;
 		} else if ( inc === "backward" ) {
-			if ( chapter <= 0 ) return;
+			if ( chapter <= 0 ) {
+				document.querySelector( "#right" ).style.left = "100%";
+				document.querySelector( "#backToBook" ).style.display = prevDisplay;
+				return;
+			}
 			chapter--;
 			document.querySelector( "#book" ).innerHTML = "";
 
@@ -326,6 +336,8 @@
 			if ( chapter < chapters.length - 1 ) document.querySelector( "#book" ).appendChild( nextButton );
 		}
 		window.scrollTo( { top: 0 } );
+		document.querySelector( "#right" ).style.height = `${ document.querySelector( "#left" )
+																	  .getBoundingClientRect().height }px`;
 	}
 
 	let socket = io();
@@ -401,6 +413,8 @@
 			containerEl.appendChild( pel2 );
 			document.querySelector( "#list" ).appendChild( containerEl );
 		}
+		document.querySelector( "#right" ).style.height = `${ document.querySelector( "#left" )
+																	  .getBoundingClientRect().height }px`;
 	} );
 	socket.on( "delete", ( book ) => {
 		document.querySelector( `[name=${ book }]` ).remove();
